@@ -72,7 +72,7 @@ with st.sidebar:
     gekozen_logo = st.selectbox("Selecteer Logo", options=beschikbare_logos) if beschikbare_logos else None
     marge_waarde = st.text_input("Crop marge (pixels)", value="5")
 
-# Upload gedeelte (zonder strenge type-filter in de browser)
+# Upload gedeelte
 st.subheader("📂 Bladmuziek Bestanden")
 uploaded_files = st.file_uploader(
     "Selecteer of sleep je PDF-bestanden hier naartoe", 
@@ -88,108 +88,102 @@ if uploaded_files:
     else:
         st.success(f"Er zijn {len(pdf_files)} geldige PDF-bestanden geselecteerd!")
         
-    for f in pdf_files:
+        for f in pdf_files:
             st.write(f"📄 {f.name} ({f.size} bytes)")
         
-    if st.button("🚀 Crop & Maak E-reader PDF", type="primary"):
-            # (Hieronder blijft de rest van je verwerkingscode hetzelfde)
+        if st.button("🚀 Crop & Maak E-reader PDF", type="primary"):
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            tijdelijke_bestanden = []
+            output_pdf_pad = "e_reader_setlist.pdf"
+            
+            try:
+                writer = PdfWriter()
+                huidige_pagina_teller = 0
+                titelblad_ruw = "temp_titelblad_ruw.pdf"
+                titelblad_cropped = "temp_titelblad_cropped.pdf"
 
-    
-    # Toon een lijstje van wat er geüpload is
-    for f in uploaded_files:
-        st.write(f"📄 {f.name} ({f.size} bytes)")
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        tijdelijke_bestanden = []
-        output_pdf_pad = "e_reader_setlist.pdf"
-        
-        try:
-            writer = PdfWriter()
-            huidige_pagina_teller = 0
-            titelblad_ruw = "temp_titelblad_ruw.pdf"
-            titelblad_cropped = "temp_titelblad_cropped.pdf"
+                if gebruik_titelblad:
+                    status_text.text("Bezig met genereren en croppen van titelblad...")
+                    logo_pad = os.path.join(Path(__file__).parent, gekozen_logo) if gekozen_logo else ""
+                    genereer_titelblad(titel_setlist, instrument_naam, logo_pad, titelblad_ruw)
+                    tijdelijke_bestanden.append(titelblad_ruw)
 
-            if gebruik_titelblad:
-                status_text.text("Bezig met genereren en croppen van titelblad...")
-                logo_pad = os.path.join(Path(__file__).parent, gekozen_logo) if gekozen_logo else ""
-                genereer_titelblad(titel_setlist, instrument_naam, logo_pad, titelblad_ruw)
-                tijdelijke_bestanden.append(titelblad_ruw)
+                    crop([
+                        titelblad_ruw,
+                        "-o", titelblad_cropped,
+                        "-p", marge_waarde.strip(),
+                        "-u",
+                        "-s"
+                    ], quiet=True, string_io=True)
 
-                crop([
-                    titelblad_ruw,
-                    "-o", titelblad_cropped,
-                    "-p", marge_waarde.strip(),
-                    "-u",
-                    "-s"
-                ], quiet=True, string_io=True)
+                    if os.path.exists(titelblad_cropped):
+                        tijdelijke_bestanden.append(titelblad_cropped)
+                        gebruikte_titelblad_pdf = titelblad_cropped
+                    else:
+                        gebruikte_titelblad_pdf = titelblad_ruw
 
-                if os.path.exists(titelblad_cropped):
-                    tijdelijke_bestanden.append(titelblad_cropped)
-                    gebruikte_titelblad_pdf = titelblad_cropped
-                else:
-                    gebruikte_titelblad_pdf = titelblad_ruw
+                    writer.append(gebruikte_titelblad_pdf)
+                    writer.add_outline_item(title=f"{titel_setlist} - {instrument_naam}" if instrument_naam else titel_setlist, page_number=huidige_pagina_teller)
+                    huidige_pagina_teller += 1
 
-                writer.append(gebruikte_titelblad_pdf)
-                writer.add_outline_item(title=f"{titel_setlist} - {instrument_naam}" if instrument_naam else titel_setlist, page_number=huidige_pagina_teller)
-                huidige_pagina_teller += 1
+                totaal = len(pdf_files)
+                for index, uploaded_file in enumerate(pdf_files):
+                    stuk_naam = formatteer_titel(uploaded_file.name)
+                    status_text.text(f"Bezig met croppen ({index+1}/{totaal}): {stuk_naam}")
+                    progress_bar.progress((index + 1) / totaal)
 
-            totaal = len(uploaded_files)
-            for index, uploaded_file in enumerate(uploaded_files):
-                stuk_naam = formatteer_titel(uploaded_file.name)
-                status_text.text(f"Bezig met croppen ({index+1}/{totaal}): {stuk_naam}")
-                progress_bar.progress((index + 1) / totaal)
+                    temp_input_path = f"temp_input_{index}.pdf"
+                    with open(temp_input_path, "wb") as file_out:
+                        file_out.write(uploaded_file.getbuffer())
+                    tijdelijke_bestanden.append(temp_input_path)
 
-                temp_input_path = f"temp_input_{index}.pdf"
-                with open(temp_input_path, "wb") as file_out:
-                    file_out.write(uploaded_file.getbuffer())
-                tijdelijke_bestanden.append(temp_input_path)
+                    temp_cropped_path = f"temp_cropped_{index}.pdf"
+                    _, _, _, stderr = crop([
+                        temp_input_path,
+                        "-o", temp_cropped_path,
+                        "-p", marge_waarde.strip(),
+                        "-u",
+                        "-s"
+                    ], quiet=True, string_io=True)
 
-                temp_cropped_path = f"temp_cropped_{index}.pdf"
-                _, _, _, stderr = crop([
-                    temp_input_path,
-                    "-o", temp_cropped_path,
-                    "-p", marge_waarde.strip(),
-                    "-u",
-                    "-s"
-                ], quiet=True, string_io=True)
+                    if not os.path.exists(temp_cropped_path) or os.path.getsize(temp_cropped_path) == 0:
+                        raise Exception(f"Fout bij het croppen van {stuk_naam}. Mogelijke fout: {stderr}")
 
-                if not os.path.exists(temp_cropped_path) or os.path.getsize(temp_cropped_path) == 0:
-                    raise Exception(f"Fout bij het croppen van {stuk_naam}. Mogelijke fout: {stderr}")
+                    tijdelijke_bestanden.append(temp_cropped_path)
 
-                tijdelijke_bestanden.append(temp_cropped_path)
+                    temp_doc = fitz.open(temp_cropped_path)
+                    aantal_paginas = len(temp_doc)
+                    temp_doc.close()
 
-                temp_doc = fitz.open(temp_cropped_path)
-                aantal_paginas = len(temp_doc)
-                temp_doc.close()
+                    writer.append(temp_cropped_path)
+                    writer.add_outline_item(title=stuk_naam, page_number=huidige_pagina_teller)
+                    huidige_pagina_teller += aantal_paginas
 
-                writer.append(temp_cropped_path)
-                writer.add_outline_item(title=stuk_naam, page_number=huidige_pagina_teller)
-                huidige_pagina_teller += aantal_paginas
+                status_text.text("Bezig met opslaan...")
+                with open(output_pdf_pad, "wb") as f:
+                    writer.write(f)
+                tijdelijke_bestanden.append(output_pdf_pad)
 
-            status_text.text("Bezig met opslaan...")
-            with open(output_pdf_pad, "wb") as f:
-                writer.write(f)
-            tijdelijke_bestanden.append(output_pdf_pad)
+                status_text.text("Klaar!")
+                progress_bar.progress(1.0)
+                st.success("🎉 Je e-reader setlist is succesvol aangemaakt!")
 
-            status_text.text("Klaar!")
-            progress_bar.progress(1.0)
-            st.success("🎉 Je e-reader setlist is succesvol aangemaakt!")
+                with open(output_pdf_pad, "rb") as f:
+                    st.download_button(
+                        label="📥 Download E-reader PDF",
+                        data=f,
+                        file_name=f"{titel_setlist}_{instrument_naam}.pdf".replace(" ", "_"),
+                        mime="application/pdf"
+                    )
 
-            with open(output_pdf_pad, "rb") as f:
-                st.download_button(
-                    label="📥 Download E-reader PDF",
-                    data=f,
-                    file_name=f"{titel_setlist}_{instrument_naam}.pdf".replace(" ", "_"),
-                    mime="application/pdf"
-                )
+            except Exception as e:
+                st.error(f"Er is een technische fout opgetreden: {str(e)}")
 
-        except Exception as e:
-            st.error(f"Er is een technische fout opgetreden: {str(e)}")
-
-        finally:
-            for temp_file in tijdelijke_bestanden:
-                if temp_file != output_pdf_pad and os.path.exists(temp_file):
-                    try:
-                        os.remove(temp_file)
-                    except:
-                        pass
+            finally:
+                for temp_file in tijdelijke_bestanden:
+                    if temp_file != output_pdf_pad and os.path.exists(temp_file):
+                        try:
+                            os.remove(temp_file)
+                        except:
+                            pass
