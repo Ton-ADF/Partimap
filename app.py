@@ -72,16 +72,28 @@ with st.sidebar:
     gekozen_logo = st.selectbox("Selecteer Logo", options=beschikbare_logos) if beschikbare_logos else None
     marge_waarde = st.text_input("Crop marge (pixels)", value="5")
 
-# Upload gedeelte
+# Upload gedeelte (zonder strenge type-filter in de browser)
 st.subheader("📂 Bladmuziek Bestanden")
 uploaded_files = st.file_uploader(
     "Selecteer of sleep je PDF-bestanden hier naartoe", 
-    type=["pdf"], 
     accept_multiple_files=True
 )
 
 if uploaded_files:
-    st.success(f"Er zijn {len(uploaded_files)} bestanden succesvol geüpload!")
+    # Filter handmatig op PDF (ongeacht kleine/grote letters)
+    pdf_files = [f for f in uploaded_files if f.name.lower().endswith('.pdf')]
+    
+    if not pdf_files:
+        st.error("Upload alleen geldige PDF-bestanden!")
+    else:
+        st.success(f"Er zijn {len(pdf_files)} geldige PDF-bestanden geselecteerd!")
+        
+        for f in pdf_files:
+            st.write(f"📄 {f.name} ({f.size} bytes)")
+        
+        if st.button("🚀 Crop & Maak E-reader PDF", type="primary"):
+            # (Hieronder blijft de rest van je verwerkingscode hetzelfde)
+
     
     # Toon een lijstje van wat er geüpload is
     for f in uploaded_files:
