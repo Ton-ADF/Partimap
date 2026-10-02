@@ -88,18 +88,16 @@ if uploaded_files:
     else:
         st.success(f"Er zijn {len(pdf_files)} geldige PDF-bestanden geselecteerd!")
         
-        for f in pdf_files:
+    for f in pdf_files:
             st.write(f"📄 {f.name} ({f.size} bytes)")
         
-        if st.button("🚀 Crop & Maak E-reader PDF", type="primary"):
+    if st.button("🚀 Crop & Maak E-reader PDF", type="primary"):
             # (Hieronder blijft de rest van je verwerkingscode hetzelfde)
 
     
     # Toon een lijstje van wat er geüpload is
     for f in uploaded_files:
         st.write(f"📄 {f.name} ({f.size} bytes)")
-    
-    if st.button("🚀 Crop & Maak E-reader PDF", type="primary"):
         progress_bar = st.progress(0)
         status_text = st.empty()
         tijdelijke_bestanden = []
